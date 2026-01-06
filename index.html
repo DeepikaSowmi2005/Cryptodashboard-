@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Cryptocurrency Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f2f4f8;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;   /* image top, text below */
+  align-items: center;      /* horizontal center */
+  justify-content: center;  /* vertical center */
+  padding: 20px;
+  background: #1e2a3a;      /* optional */
+  color: white;
+  text-align: center;
+}
+
+.header img {
+  width: 60px;     /* adjust size */
+  height: auto;
+  margin-bottom: 10px;
+}
+
+.header h1 {
+  font-size: 22px;
+  margin: 0;
+}
+
+.container {
+  padding: 15px;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+input, select, button {
+  padding: 10px;
+  font-size: 16px;
+  width: 100%;
+}
+
+button {
+  background: #1e293b;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.card {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  margin-top: 15px;
+  text-align: center;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+}
+
+.chart-container {
+  width: 100%;
+  height: 450px;   /* 🔥 CHANGE HEIGHT HERE */
+}
+
+.card img {
+  width: 60px;
+}
+
+canvas {
+  margin-top: 20px;
+}
+footer{
+  color: palevioletred;
+  padding: 20px;
+  text-align: center;
+  font-size: 15px;
+}
+@media (max-width: 600px) {
+  .chart-container {
+    height: 480px;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<header class="header">
+  <img src="/vector-icon-hi-tech-circle-company-design-business-symbol-concept-minimal-line-style.jpg" alt="logo">
+  <h1>Cryptocurrency Dashboard</h1>
+</header>
+
+<div class="container">
+
+  <!-- 🔹 SEARCH + DROPDOWN -->
+  <div class="row">
+    <input id="searchInput" placeholder="Search coin (bitcoin / eth / doge)">
+    <button onclick="searchCoin()">Search</button>
+  </div>
+
+  <div class="row">
+    <select id="coinDropdown"></select>
+  </div>
+
+  <div class="row">
+    <select id="currency" onchange="loadCoin(currentCoinId)">
+      <option value="usd">USD</option>
+      <option value="inr">INR</option>
+    </select>
+  </div>
+
+  <div id="coinCard" class="card" style="display:none;"></div>
+  <div class="chart-container">
+  <canvas id="priceChart"></canvas>
+</div>
+
+</div>
+
+<script>
+let chart;
+let coins = [];
+let currentCoinId = "bitcoin";
+let isLoading = false;
+let requestId = 0;  
+
+/* 🔹 LOAD COIN LIST */
+async function loadCoins() {
+  const res = await fetch(
+    "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1"
+  );
+  coins = await res.json();
+
+  const dropdown = document.getElementById("coinDropdown");
+  dropdown.innerHTML = "";
+
+  coins.forEach(coin => {
+    const option = document.createElement("option");
+    option.value = coin.id;
+    option.textContent = `${coin.name} (${coin.symbol.toUpperCase()})`;
+    dropdown.appendChild(option);
+  });
+  dropdown.addEventListener("change", (e) => {
+  document.getElementById("searchInput").value = "";
+  loadCoin(e.target.value);
+});
+
+  loadCoin("bitcoin");
+}
+
+/* 🔹 SEARCH COIN (INPUT OR DROPDOWN) */
+function searchCoin() {
+  const text = document.getElementById("searchInput").value
+    .toLowerCase()
+    .trim();
+
+  if (!text) return;
+
+  const found = coins.find(c =>
+    c.name.toUpperCase().includes(text) ||
+    c.name.toLowerCase().includes(text) ||
+    c.symbol.toLowerCase().includes(text)
+  );
+
+  if (!found) {
+    alert("Coin not found. Example: bitcoin, eth, ada, sol");
+    return;
+  }
+
+  document.getElementById("coinDropdown").value = found.id;
+  loadCoin(found.id);
+}
+
+
+/* 🔹 LOAD COIN DATA */
+async function loadCoin(coinId) {
+  requestId++;
+  const currentRequest = requestId;
+
+  currentCoinId = coinId;
+  const currency = document.getElementById("currency").value;
+
+  try {
+    const res = await fetch(
+      `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false`
+    );
+
+    if (!res.ok) throw new Error("API limit");
+
+    if (currentRequest !== requestId) return; 
+
+    const data = await res.json();
+
+    const change24h = data.market_data.price_change_percentage_24h;
+    const changeColor = change24h >= 0 ? "green" : "red";
+    const changeArrow = change24h >= 0 ? "⬆️" : "⬇️";
+
+    document.getElementById("coinCard").style.display = "block";
+    document.getElementById("coinCard").innerHTML = `
+      <img src="${data.image.large}">
+      <h2>${data.name} (${data.symbol.toUpperCase()})</h2>
+      <p>Current Price: ${data.market_data.current_price[currency].toLocaleString()} ${currency.toUpperCase()}</p>
+      <p>24h High: ${data.market_data.high_24h[currency].toLocaleString()}</p>
+      <p>24h Low: ${data.market_data.low_24h[currency].toLocaleString()}</p>
+      <p>Market Cap: ${data.market_data.market_cap[currency].toLocaleString()}</p>
+      <p>24h Volume: ${data.market_data.total_volume[currency].toLocaleString()}</p>
+      <p style="color:${changeColor}; font-weight:bold;">
+        24h Change: ${changeArrow} ${change24h.toFixed(2)}%
+      </p>
+    `;
+
+    await loadChart();
+
+  } catch (err) {
+    alert("⏳ Too many requests kindly please wait");
+  } finally {
+    isLoading = false;
+  }
+}
+
+/* 🔹 LOAD CHART */
+async function loadChart() {
+  const localRequest = requestId; // 👈 ADD
+
+  const currency = document.getElementById("currency").value;
+
+  const res = await fetch(
+    `https://api.coingecko.com/api/v3/coins/${currentCoinId}/market_chart?vs_currency=${currency}&days=1`
+  );
+  const data = await res.json();
+
+  if (localRequest !== requestId) return; // 👈 IGNORE OLD CHART
+
+  if (!data.prices) return;
+
+  const prices = data.prices.map(p => p[1]);
+  const labels = data.prices.map(p =>
+    new Date(p[0]).toLocaleString()
+  );
+
+  if (chart) chart.destroy();
+
+  chart = new Chart(document.getElementById("priceChart"), {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label: `${currentCoinId.toUpperCase()} Price (${currency.toUpperCase()})`,
+        data: prices,
+        borderWidth: 2,
+        tension: 0.3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false
+    }
+  });
+}
+/* 🔹 INIT */
+loadCoins();
+setInterval(() => loadCoin(currentCoinId), 60000);
+</script>
+<footer>©Built by Deepi🌐📉</footer>
+</body>
+</html>
